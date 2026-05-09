@@ -286,6 +286,8 @@ export default function App() {
   const [feedFlash, setFeedFlash]   = useState(false)
   const [bathFlash, setBathFlash]   = useState(false)
   const [paused, setPaused]         = useState(false)
+  const [speed, setSpeed]           = useState(1)   // ticks per interval
+  const [autoSustain, setAutoSustain] = useState(false)
   const [showTokenSetup, setShowTokenSetup] = useState(!getStoredToken())
   const [tokenInput, setTokenInput]         = useState('')
 
@@ -313,11 +315,26 @@ export default function App() {
   const gndY  = worldH * GND_FRAC
 
   // ── Sim tick ──────────────────────────────────────────────────────────────
+  const speedRef = useRef(speed)
+  const autoSustainRef = useRef(autoSustain)
+  useEffect(() => { speedRef.current = speed }, [speed])
+  useEffect(() => { autoSustainRef.current = autoSustain }, [autoSustain])
+
   useEffect(() => {
     if (paused) return
     const id = setInterval(() => {
-      const s = simRef.current!.tick()
-      setState({ ...s })
+      const sim = simRef.current!
+      for (let i = 0; i < speedRef.current; i++) sim.tick()
+      // Auto-sustain: feed/bathe entities in need
+      if (autoSustainRef.current) {
+        const BAD_MOODS = ['sadness','grief','loneliness','fear','existential_dread','anger','frustration']
+        sim.state.entities.forEach(e => {
+          if (!e.is_alive) return
+          if (e.energy < 35) sim.feedEntity(e.id)
+          if (BAD_MOODS.includes(e.emotional_state.emotion)) sim.bathEntity(e.id)
+        })
+      }
+      setState({ ...sim.state })
     }, TICK_MS)
     return () => clearInterval(id)
   }, [paused])
@@ -402,6 +419,8 @@ export default function App() {
     simRef.current!.bathEntity(id)
     setState({ ...simRef.current!.state })
   }, [])
+  const SPEEDS = [1, 2, 10, 40]
+  const cycleSpeed = () => setSpeed(s => SPEEDS[(SPEEDS.indexOf(s) + 1) % SPEEDS.length])
   const handleReset = () => {
     if (!confirm('¿Borrar todo y empezar de nuevo?')) return
     Simulation.clearSave()
@@ -440,6 +459,9 @@ export default function App() {
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <IconBtn emoji="🍎" flash={feedFlash} flashColor="#f59e0b" onClick={handleFeedAll} title="Alimentar todos" />
           <IconBtn emoji="🚿" flash={bathFlash} flashColor="#38bdf8" onClick={handleBathAll} title="Bañar todos" />
+          <SpeedBtn speed={speed} onClick={cycleSpeed} />
+          <IconBtn emoji={autoSustain ? '🤖' : '🫥'} flash={autoSustain} flashColor="#a78bfa"
+            onClick={() => setAutoSustain(s => !s)} title={autoSustain ? 'Auto-sustento ON' : 'Auto-sustento OFF'} />
           <IconBtn emoji={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} title={paused ? 'Reanudar' : 'Pausar'} />
           <IconBtn
             emoji={savedFlash === 'saving' ? '…' : savedFlash === 'ok' ? '✓' : savedFlash === 'err' ? '✗' : '💾'}
@@ -462,6 +484,7 @@ export default function App() {
             if (obj.type === 'bush')       return <Bush      key={obj.id} obj={obj} gndY={gndY} ZW={ZW} />
             if (obj.type === 'log')        return <Log       key={obj.id} obj={obj} gndY={gndY} ZW={ZW} />
             if (obj.type === 'pond')       return <Pond      key={obj.id} obj={obj} gndY={gndY} ZW={ZW} />
+            if (obj.type === 'structure')  return <Structure key={obj.id} obj={obj} gndY={gndY} ZW={ZW} />
             return null
           })}
           {aliveEntities.map(e => {
@@ -594,7 +617,47 @@ export default function App() {
   )
 }
 
+// ── Structure SVG ─────────────────────────────────────────────────────────────
+function Structure({ obj, gndY, ZW }: { obj: WorldObject; gndY: number; ZW: number }) {
+  const zoneIdx = ZONE_NAMES.indexOf(obj.zone as typeof ZONE_NAMES[number])
+  const cx = (zoneIdx >= 0 ? zoneIdx : 0) * ZW + obj.x * ZW
+  const baseY = gndY + 4
+  return (
+    <g>
+      {/* Walls */}
+      <rect x={cx-10} y={baseY-20} width={20} height={20} fill="#2d3f5e" stroke="#4a6080" strokeWidth={1} />
+      {/* Roof */}
+      <polygon points={`${cx-13},${baseY-20} ${cx},${baseY-32} ${cx+13},${baseY-20}`}
+        fill="#8b3a3a" stroke="#a04040" strokeWidth={1} />
+      {/* Door */}
+      <rect x={cx-3} y={baseY-10} width={6} height={10} rx={1} fill="#1a2a3a" />
+      {/* Window */}
+      <rect x={cx+3} y={baseY-17} width={5} height={5} rx={1} fill="#93c5fd" fillOpacity={0.6} />
+      {/* Builder label */}
+      {obj.builder && (
+        <text x={cx} y={baseY-35} textAnchor="middle" fontSize={8} fill="#94a3b8">
+          {obj.builder}
+        </text>
+      )}
+    </g>
+  )
+}
+
 // ── Small UI components ───────────────────────────────────────────────────────
+function SpeedBtn({ speed, onClick }: { speed: number; onClick: () => void }) {
+  const color = speed === 1 ? '#64748b' : speed === 2 ? '#22d3ee' : speed === 10 ? '#f59e0b' : '#f87171'
+  return (
+    <button onClick={onClick} title={`Velocidad ×${speed} — clic para cambiar`} style={{
+      height:34, minWidth:42, borderRadius:17, border:`1px solid ${color}`,
+      background: speed > 1 ? `${color}22` : '#0f172a',
+      color, fontSize:11, fontWeight:800, cursor:'pointer',
+      padding:'0 10px', transition:'all 0.2s',
+    }}>
+      ×{speed}
+    </button>
+  )
+}
+
 function IconBtn({ emoji, onClick, title, flash, flashColor }: {
   emoji: string; onClick: () => void; title?: string
   flash?: boolean; flashColor?: string

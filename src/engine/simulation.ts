@@ -88,6 +88,12 @@ function think(e: Entity, tick: number, worldObjects: WorldObject[]): { action: 
     return { action: 'chop_tree', thought: 'Este árbol sin manzanas, lo voy a talar.' }
   }
 
+  // Bathe at pond if unhappy
+  const badMoods = ['sadness','grief','loneliness','fear','existential_dread','anger','frustration']
+  if (ponds.length > 0 && badMoods.includes(e.emotional_state.emotion) && Math.random() < 0.35) {
+    return { action: 'rest', thought: 'Necesito refrescarme en el estanque.' }
+  }
+
   // Contemplate near ponds
   if (ponds.length > 0 && Math.random() < 0.08) {
     const thoughts = [
@@ -231,6 +237,13 @@ export class Simulation {
         }
       } else if (action === 'build_structure') {
         e.resources = { wood: 0 }
+        const struct: WorldObject = {
+          id: _woId++, type: 'structure', zone: e.current_zone,
+          x: 0.1 + Math.random() * 0.8, y: 0,
+          apples: 0, max_apples: 0, hp: 200, created_tick: t,
+          builder: e.name,
+        }
+        activeObjs.push(struct)
         newEvents.push({ type: 'structure_built', tick: t, builder: e.name })
       } else if (action === 'wander') {
         // Maybe migrate zone

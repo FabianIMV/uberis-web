@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Simulation, TICK_MS } from './engine/simulation'
+import { loadFromGitHub, saveToGitHub } from './engine/githubSync'
 import type { Entity, WorldObject } from './engine/types'
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -275,16 +276,25 @@ interface WanderTarget { tx: number; ty: number; expires: number }
 export default function App() {
   const simRef = useRef<Simulation | null>(null)
   if (!simRef.current) {
-    const saved = Simulation.load()
+    const saved = Simulation.load()   // localStorage fallback while GitHub loads
     simRef.current = new Simulation(saved ?? undefined)
   }
 
   const [state, setState] = useState(() => simRef.current!.state)
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [savedFlash, setSavedFlash] = useState(false)
+  const [savedFlash, setSavedFlash] = useState<'idle'|'saving'|'ok'|'err'>('idle')
   const [feedFlash, setFeedFlash]   = useState(false)
   const [bathFlash, setBathFlash]   = useState(false)
   const [paused, setPaused]         = useState(false)
+
+  // Load from GitHub on startup (overrides localStorage if available)
+  useEffect(() => {
+    loadFromGitHub().then(ghState => {
+      if (!ghState) return
+      simRef.current = new Simulation(ghState)
+      setState({ ...simRef.current.state })
+    })
+  }, [])
 
   // Dimensions
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight })
@@ -305,8 +315,6 @@ export default function App() {
     if (paused) return
     const id = setInterval(() => {
       const s = simRef.current!.tick()
-      // Auto-save every 10 ticks
-      if (s.world.current_tick % 10 === 0) simRef.current!.save()
       setState({ ...s })
     }, TICK_MS)
     return () => clearInterval(id)
@@ -364,10 +372,13 @@ export default function App() {
   const selected = selectedId != null ? aliveEntities.find(e => e.id === selectedId) : null
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  const handleSave = () => {
-    simRef.current!.save()
-    setSavedFlash(true)
-    setTimeout(() => setSavedFlash(false), 1500)
+  const handleSave = async () => {
+    const s = simRef.current!.state
+    simRef.current!.save()    // localStorage instantly
+    setSavedFlash('saving')
+    const ok = await saveToGitHub(s)
+    setSavedFlash(ok ? 'ok' : 'err')
+    setTimeout(() => setSavedFlash('idle'), 2000)
   }
   const handleFeedAll = () => {
     simRef.current!.feedAll()
@@ -428,7 +439,11 @@ export default function App() {
           <IconBtn emoji="🍎" flash={feedFlash} flashColor="#f59e0b" onClick={handleFeedAll} title="Alimentar todos" />
           <IconBtn emoji="🚿" flash={bathFlash} flashColor="#38bdf8" onClick={handleBathAll} title="Bañar todos" />
           <IconBtn emoji={paused ? '▶' : '⏸'} onClick={() => setPaused(p => !p)} title={paused ? 'Reanudar' : 'Pausar'} />
-          <IconBtn emoji={savedFlash ? '✓' : '💾'} flash={savedFlash} flashColor="#22c55e" onClick={handleSave} title="Guardar" />
+          <IconBtn
+            emoji={savedFlash === 'saving' ? '…' : savedFlash === 'ok' ? '✓' : savedFlash === 'err' ? '✗' : '💾'}
+            flash={savedFlash === 'ok'} flashColor="#22c55e"
+            onClick={handleSave} title="Guardar en GitHub"
+          />
           <IconBtn emoji="🗑" onClick={handleReset} title="Reiniciar mundo" />
         </div>
       </div>

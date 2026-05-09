@@ -23,7 +23,7 @@ export interface Memory {
 
 export interface WorldObject {
   id: number
-  type: 'apple_tree' | 'log' | 'bush' | 'pond'
+  type: 'apple_tree' | 'log' | 'bush' | 'pond' | 'structure'
   zone: Zone
   x: number   // 0-1 within zone
   y: number   // offset from ground
@@ -31,6 +31,7 @@ export interface WorldObject {
   max_apples: number
   hp: number
   created_tick: number
+  builder?: string  // name of entity that built it (structures only)
 }
 
 export interface Entity {

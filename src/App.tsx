@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Simulation, TICK_MS } from './engine/simulation'
-import { loadFromGitHub, saveToGitHub } from './engine/githubSync'
+import { loadFromGitHub, saveToGitHub, getStoredToken, setStoredToken } from './engine/githubSync'
 import type { Entity, WorldObject } from './engine/types'
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -286,6 +286,8 @@ export default function App() {
   const [feedFlash, setFeedFlash]   = useState(false)
   const [bathFlash, setBathFlash]   = useState(false)
   const [paused, setPaused]         = useState(false)
+  const [showTokenSetup, setShowTokenSetup] = useState(!getStoredToken())
+  const [tokenInput, setTokenInput]         = useState('')
 
   // Load from GitHub on startup (overrides localStorage if available)
   useEffect(() => {
@@ -445,6 +447,7 @@ export default function App() {
             onClick={handleSave} title="Guardar en GitHub"
           />
           <IconBtn emoji="🗑" onClick={handleReset} title="Reiniciar mundo" />
+          <IconBtn emoji="🔑" onClick={() => setShowTokenSetup(true)} title="Configurar token GitHub" />
         </div>
       </div>
 
@@ -529,6 +532,64 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Token setup overlay */}
+      {showTokenSetup && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(2,6,23,0.92)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:100,
+        }}>
+          <div style={{
+            background:'#0f172a', border:'1px solid #334155', borderRadius:16,
+            padding:'28px 24px', maxWidth:360, width:'90%',
+          }}>
+            <div style={{ fontSize:20, marginBottom:8 }}>🔑 GitHub Token</div>
+            <div style={{ fontSize:12, color:'#94a3b8', marginBottom:16, lineHeight:1.5 }}>
+              Para guardar tus criaturas en GitHub necesitas un Personal Access Token con permiso <b style={{color:'#e2e8f0'}}>Contents: Read & Write</b> en el repo <b style={{color:'#22d3ee'}}>uberis-web</b>.
+            </div>
+            <input
+              type="password"
+              placeholder="ghp_…"
+              value={tokenInput}
+              onChange={e => setTokenInput(e.target.value)}
+              style={{
+                width:'100%', padding:'10px 12px', borderRadius:8,
+                border:'1px solid #334155', background:'#1e293b',
+                color:'white', fontSize:13, outline:'none', marginBottom:12,
+                boxSizing:'border-box',
+              }}
+            />
+            <div style={{ display:'flex', gap:8 }}>
+              <button
+                onClick={() => { setStoredToken(tokenInput); setShowTokenSetup(false) }}
+                disabled={!tokenInput.trim()}
+                style={{
+                  flex:1, padding:'10px', borderRadius:8, border:'none',
+                  background: tokenInput.trim() ? '#22d3ee' : '#334155',
+                  color: tokenInput.trim() ? '#020617' : '#64748b',
+                  fontWeight:700, cursor: tokenInput.trim() ? 'pointer' : 'default',
+                  fontSize:13,
+                }}
+              >
+                Guardar token
+              </button>
+              <button
+                onClick={() => setShowTokenSetup(false)}
+                style={{
+                  padding:'10px 14px', borderRadius:8,
+                  border:'1px solid #334155', background:'transparent',
+                  color:'#64748b', cursor:'pointer', fontSize:13,
+                }}
+              >
+                Ahora no
+              </button>
+            </div>
+            <div style={{ fontSize:10, color:'#475569', marginTop:12, lineHeight:1.5 }}>
+              El token se guarda solo en este browser. Sin él, el guardado usa localStorage (solo este dispositivo).
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
